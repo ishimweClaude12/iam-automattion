@@ -1,0 +1,28 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Parameterized S3 bucket
+
+Parameters:
+  BucketSuffix:
+    Type: String
+    Description: Unique suffix for the bucket name
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Default: dev
+
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "cfn-learning-${Environment}-${BucketSuffix}"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  BucketName:
+    Description: Name of the created bucket
+    Value: !Ref MyBucket
+  BucketArn:
+    Description: ARN of the created bucket
+    Value: !GetAtt MyBucket.Arn

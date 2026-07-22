@@ -1,0 +1,4 @@
+template-file-path: iam.yaml
+tags:
+  Project: iam-automation
+  ManagedBy: git-sync

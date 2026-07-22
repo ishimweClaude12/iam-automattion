@@ -1,0 +1,135 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >
+  IAM automation. Creates a shared one-time console password stored in
+  Secrets Manager, an S3 group (list buckets) and an EC2 group (list and
+  create instances), and three IAM users with console access that must reset
+  their password on first sign-in. ec2-user2 is explicitly denied the ability
+  to create EC2 instances.
+
+Resources:
+  UserOneTimePassword:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: iam-one-time-password
+      Description: Shared temporary console password for the IAM users
+      GenerateSecretString:
+        PasswordLength: 20
+        RequireEachIncludedType: true
+        ExcludeCharacters: '"@/\'
+
+  # ------------------------------------------------------------------
+  # 2a. S3 group: permission to list buckets.
+  # ------------------------------------------------------------------
+  S3Group:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: s3-group
+      Policies:
+        - PolicyName: s3-list-buckets
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListAllBuckets
+                Effect: Allow
+                Action:
+                  - s3:ListAllMyBuckets
+                  - s3:GetBucketLocation
+                Resource: "*"
+
+  # ------------------------------------------------------------------
+  # 2b. EC2 group: permission to list instances and create instances.
+  #     The Describe* actions are needed so the launch wizard and the
+  #     instances list render in the console.
+  # ------------------------------------------------------------------
+  EC2Group:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: ec2-group
+      Policies:
+        - PolicyName: ec2-list-and-create
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListInstances
+                Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceStatus
+                  - ec2:DescribeInstanceTypes
+                  - ec2:DescribeImages
+                  - ec2:DescribeVpcs
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeKeyPairs
+                Resource: "*"
+              - Sid: CreateInstances
+                Effect: Allow
+                Action:
+                  - ec2:RunInstances
+                Resource: "*"
+
+  # ------------------------------------------------------------------
+  # 3. IAM users with console access.
+  #    Password comes from the secret via a dynamic reference. Using
+  #    !Sub with the logical id also makes CloudFormation create the
+  #    secret before the user, so ordering is handled automatically.
+  #    PasswordResetRequired forces a change at first login.
+  # ------------------------------------------------------------------
+  Ec2User1:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: ec2-user1
+      Groups:
+        - !Ref EC2Group
+      LoginProfile:
+        Password: !Sub "{{resolve:secretsmanager:${UserOneTimePassword}:SecretString}}"
+        PasswordResetRequired: true
+
+  Ec2User2:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: ec2-user2
+      Groups:
+        - !Ref EC2Group
+      LoginProfile:
+        Password: !Sub "{{resolve:secretsmanager:${UserOneTimePassword}:SecretString}}"
+        PasswordResetRequired: true
+      # Explicit Deny overrides the group's Allow on ec2:RunInstances.
+      # This is the key IAM concept: deny always wins.
+      Policies:
+        - PolicyName: deny-ec2-run-instances
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DenyCreateInstances
+                Effect: Deny
+                Action:
+                  - ec2:RunInstances
+                Resource: "*"
+
+  S3User:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: s3-user
+      Groups:
+        - !Ref S3Group
+      LoginProfile:
+        Password: !Sub "{{resolve:secretsmanager:${UserOneTimePassword}:SecretString}}"
+        PasswordResetRequired: true
+
+Outputs:
+  ConsoleSignInUrl:
+    Description: Account-specific IAM user sign-in URL
+    Value: !Sub "https://${AWS::AccountId}.signin.aws.amazon.com/console"
+
+  PasswordSecretName:
+    Description: >
+      Retrieve the temporary password from this secret in Secrets Manager.
+      The value is deliberately NOT exported as an output, so it never
+      appears in plaintext in the stack.
+    Value: !Ref UserOneTimePassword
+
+  UsersCreated:
+    Description: The IAM users provisioned by this stack
+    Value: "ec2-user1, ec2-user2, s3-user"
