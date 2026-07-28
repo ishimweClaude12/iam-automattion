@@ -108,15 +108,15 @@ Resources:
                   - ec2:RunInstances
                 Resource: "*"
 
-  S3User:
-    Type: AWS::IAM::User
-    Properties:
-      UserName: s3-user
-      Groups:
-        - !Ref S3Group
-      LoginProfile:
-        Password: !Sub "{{resolve:secretsmanager:${UserOneTimePassword}:SecretString}}"
-        PasswordResetRequired: true
+  # S3User:
+  #   Type: AWS::IAM::User
+  #   Properties:
+  #     UserName: s3-user
+  #     Groups:
+  #       - !Ref S3Group
+  #     LoginProfile:
+  #       Password: !Sub "{{resolve:secretsmanager:${UserOneTimePassword}:SecretString}}"
+  #       PasswordResetRequired: true
 
 Outputs:
   ConsoleSignInUrl:
